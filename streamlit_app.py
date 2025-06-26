@@ -83,9 +83,6 @@ system_instructions = st.sidebar.text_area(
     key="system_instructions"
 )
 
-# Update system instructions in session state
-st.session_state.system_instructions = system_instructions
-
 # Main coding interface
 st.title(f"Editing: {st.session_state.current_file}")
 
