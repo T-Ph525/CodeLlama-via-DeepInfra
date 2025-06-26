@@ -1,12 +1,13 @@
 import streamlit as st
+import requests
+import os
+from git import Repo, GitCommandError
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import HtmlFormatter
-import os
-from git import Repo, GitCommandError
 
 # Set page configuration
-st.set_page_config(page_title="Multi-Tab App with Git and AI Reference", page_icon='💻')
+st.set_page_config(page_title="Multi-Tab App with VS Code-like Editor", page_icon='💻')
 
 # Initialize session state for file management, chat messages, and AI references
 if 'files' not in st.session_state:
@@ -22,13 +23,51 @@ if 'repo' not in st.session_state:
 if 'ai_references' not in st.session_state:
     st.session_state.ai_references = {}
 
+# GitHub OAuth credentials
+GITHUB_CLIENT_ID = 'your_github_client_id'
+GITHUB_CLIENT_SECRET = 'your_github_client_secret'
+
+# Custom CSS to mimic VS Code
+st.markdown("""
+<style>
+    .code-editor {
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        border-radius: 5px;
+        padding: 10px;
+        font-family: 'Consolas', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        border: 1px solid #333;
+        height: 400px;
+        overflow-y: auto;
+        white-space: pre;
+    }
+    .line-numbers {
+        background-color: #252526;
+        color: #5a5a5a;
+        padding: 10px;
+        border-radius: 5px;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        margin-right: 10px;
+        text-align: right;
+        display: inline-block;
+        width: 30px;
+    }
+    .code-line {
+        display: flex;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Function to apply syntax highlighting
 def syntax_highlight(code, language):
     try:
         lexer = get_lexer_by_name(language)
     except:
         lexer = get_lexer_by_name("text")
-    formatter = HtmlFormatter()
+    formatter = HtmlFormatter(style="monokai", linenos=True, noclasses=True)
     return highlight(code, lexer, formatter)
 
 # Function to simulate AI response
@@ -48,6 +87,29 @@ def scan_repository_for_ai(repo_path):
                 # Skip binary files
                 continue
     return ai_references
+
+# GitHub login function
+def github_login():
+    auth_url = f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}"
+    st.write(f"[Login with GitHub]({auth_url})")
+
+    code = st.experimental_get_query_params().get("code", None)
+    if code:
+        token_url = "https://github.com/login/oauth/access_token"
+        payload = {
+            'client_id': GITHUB_CLIENT_ID,
+            'client_secret': GITHUB_CLIENT_SECRET,
+            'code': code[0]
+        }
+        headers = {'Accept': 'application/json'}
+        response = requests.post(token_url, json=payload, headers=headers)
+        if response.status_code == 200:
+            access_token = response.json().get('access_token')
+            st.success("Successfully logged in with GitHub!")
+            return access_token
+        else:
+            st.error("Failed to login with GitHub.")
+    return None
 
 # Create tabs
 tab1, tab2 = st.tabs(["Chat with AI", "Code Editor"])
@@ -75,6 +137,10 @@ with tab1:
 
 with tab2:
     st.title("Code Editor")
+
+    # GitHub Login UI
+    st.sidebar.title("GitHub Login")
+    access_token = github_login()
 
     # Sidebar for file and Git management
     st.sidebar.title("File Management")
@@ -158,7 +224,11 @@ with tab2:
     st.subheader("Syntax Highlighted Code")
     language = st.session_state.current_file.split('.')[-1]
     highlighted_code = syntax_highlight(file_content, language)
-    st.markdown(highlighted_code, unsafe_allow_html=True)
+
+    # Display code with line numbers
+    code_lines = highlighted_code.split('\n')
+    for i, line in enumerate(code_lines, start=1):
+        st.markdown(f'<div class="code-line"><span class="line-numbers">{i}</span><span class="code-editor">{line}</span></div>', unsafe_allow_html=True)
 
     # Display the list of files and their content
     st.subheader("Files in Session")
