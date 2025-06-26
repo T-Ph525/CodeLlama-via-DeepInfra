@@ -12,8 +12,10 @@ if 'files' not in st.session_state:
     st.session_state.files = {
         "main.py": {"content": "print('Hello, World!')"}
     }
+
 if 'current_file' not in st.session_state:
     st.session_state.current_file = "main.py"
+
 if 'system_instructions' not in st.session_state:
     st.session_state.system_instructions = "Write clear and concise code. Follow best practices and ensure the code is well-commented."
 
