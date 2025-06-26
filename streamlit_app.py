@@ -1,119 +1,111 @@
 import streamlit as st
-import requests
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name
+from pygments.formatters import HtmlFormatter
+import os
 
 # Set page configuration
-st.set_page_config(page_title="RunPod Playground - vLLM", page_icon='🦙')
+st.set_page_config(page_title="Enhanced Coding Interface", page_icon='💻')
 
-# Set API configurations
-RUNPOD_API_KEY = st.secrets["RUNPOD_API_KEY"]
-RUNPOD_ENDPOINT = "https://api.runpod.ai/v2/78o7kdng19e9mo/openai/v1"
-
-# Function to fetch models from the API
-def fetch_models(api_key):
-    headers = {
-        "Authorization": f"Bearer {api_key}"
+# Initialize session state for file management and system instructions
+if 'files' not in st.session_state:
+    st.session_state.files = {
+        "main.py": {"content": "print('Hello, World!')"}
     }
+if 'current_file' not in st.session_state:
+    st.session_state.current_file = "main.py"
+if 'system_instructions' not in st.session_state:
+    st.session_state.system_instructions = "Write clear and concise code. Follow best practices and ensure the code is well-commented."
+
+# Function to apply syntax highlighting
+def syntax_highlight(code, language):
     try:
-        response = requests.get(f"{RUNPOD_ENDPOINT}/models", headers=headers)
-        response.raise_for_status()
-        models_response = response.json()
-        list_of_models = [model['id'] for model in models_response.get('data', [])]
-        return list_of_models
-    except Exception as e:
-        st.error(f"Error fetching models: {e}")
-        return []
+        lexer = get_lexer_by_name(language)
+    except:
+        lexer = get_lexer_by_name("text")
+    formatter = HtmlFormatter()
+    return highlight(code, lexer, formatter)
 
-# Fetch models
-list_of_models = fetch_models(RUNPOD_API_KEY)
+# Sidebar for file management and system instructions
+st.sidebar.title("File Management")
 
-# Model images mapping
-MODEL_IMAGES = {
-    model: "https://em-content.zobj.net/source/twitter/376/tornado_1f32a-fe0f.png" for model in list_of_models
-}
+# Create a new file
+new_file_name = st.sidebar.text_input("New File Name", key="new_file_name")
+if st.sidebar.button("Create File"):
+    if new_file_name:
+        if new_file_name not in st.session_state.files:
+            st.session_state.files[new_file_name] = {"content": ""}
+            st.session_state.current_file = new_file_name
+        else:
+            st.sidebar.error("File already exists!")
+    else:
+        st.sidebar.error("Please enter a file name!")
 
-# Format model names for display
-def format_model_name(model_key):
-    parts = model_key.split('/')
-    model_name = parts[-1]
-    name_parts = model_name.split('-')
-    formatted_name = ' '.join(name_parts).title()
-    return formatted_name
+# File selection dropdown
+file_names = list(st.session_state.files.keys())
+selected_file = st.sidebar.selectbox("Select File", file_names, index=file_names.index(st.session_state.current_file))
 
-formatted_names_to_identifiers = {format_model_name(key): key for key in MODEL_IMAGES.keys()}
+# Update current file if selection changes
+if selected_file != st.session_state.current_file:
+    st.session_state.current_file = selected_file
 
-# Sidebar for model selection
-selected_formatted_name = st.sidebar.radio("Select LLM Model", list(formatted_names_to_identifiers.keys()))
-selected_model = formatted_names_to_identifiers[selected_formatted_name]
+# Button to delete the current file
+if st.sidebar.button("Delete File"):
+    if len(st.session_state.files) > 1:
+        del st.session_state.files[st.session_state.current_file]
+        st.session_state.current_file = file_names[0]
+    else:
+        st.sidebar.error("Cannot delete the only file!")
 
-# Display selected model image
-if MODEL_IMAGES[selected_model].startswith("http"):
-    st.image(MODEL_IMAGES[selected_model], width=90)
-else:
-    st.write(f"Model Icon: {MODEL_IMAGES[selected_model]}", unsafe_allow_html=True)
+# Button to save the current file to disk
+if st.sidebar.button("Save to Disk"):
+    file_path = os.path.join(os.getcwd(), st.session_state.current_file)
+    with open(file_path, 'w') as f:
+        f.write(st.session_state.files[st.session_state.current_file]["content"])
+    st.sidebar.success(f"File saved to {file_path}")
 
-# Function to get completion from the model
-def get_completion(api_key, model, prompt, max_tokens, temperature):
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": model,
-        "prompt": prompt,
-        "max_tokens": max_tokens,
-        "temperature": temperature
-    }
-    try:
-        response = requests.post(f"{RUNPOD_ENDPOINT}/completions", headers=headers, json=data)
-        response.raise_for_status()
-        return response.json(), None
-    except Exception as e:
-        return None, str(e)
+# Button to load a file from disk
+uploaded_file = st.sidebar.file_uploader("Load from Disk", type=None)
+if uploaded_file is not None:
+    file_content = uploaded_file.read().decode("utf-8")
+    st.session_state.files[uploaded_file.name] = {"content": file_content}
+    st.session_state.current_file = uploaded_file.name
+    st.sidebar.success(f"File loaded: {uploaded_file.name}")
 
-# Main app interface
-st.header(f"`{selected_formatted_name}` Model")
+# Text area for custom system instructions
+st.sidebar.title("System Instructions")
+system_instructions = st.sidebar.text_area(
+    "Custom System Instructions",
+    value=st.session_state.system_instructions,
+    height=150,
+    key="system_instructions"
+)
 
-with st.expander("About this app"):
-    st.write("""
-    This app allows users to interact with various models hosted on RunPod Serverless using vLLM.
-    """)
+# Update system instructions in session state
+st.session_state.system_instructions = system_instructions
 
-# Sidebar for additional parameters
-with st.sidebar:
-    max_tokens = st.slider('Max Tokens', 10, 500, 100)
-    temperature = st.slider('Temperature', 0.0, 1.0, 0.7, 0.05)
+# Main coding interface
+st.title(f"Editing: {st.session_state.current_file}")
 
-if max_tokens > 100:
-    user_provided_api_key = st.text_input("👇 Your RunPod API Key", value=st.session_state.get("RUNPOD_API_KEY", ""), type='password')
-    if user_provided_api_key:
-        st.session_state.RUNPOD_API_KEY = user_provided_api_key
-    if not st.session_state.get("RUNPOD_API_KEY"):
-        st.warning("❄️ If you want to try this app with more than `100` tokens, you must provide your own RunPod API key.")
+# Text area for editing the current file
+file_content = st.text_area(
+    "Code",
+    value=st.session_state.files[st.session_state.current_file]["content"],
+    height=400,
+    key="code_editor"
+)
 
-if max_tokens <= 100 or st.session_state.get("RUNPOD_API_KEY"):
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
+# Update file content in session state
+st.session_state.files[st.session_state.current_file]["content"] = file_content
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+# Display syntax highlighted code
+st.subheader("Syntax Highlighted Code")
+language = st.session_state.current_file.split('.')[-1]
+highlighted_code = syntax_highlight(file_content, language)
+st.markdown(highlighted_code, unsafe_allow_html=True)
 
-    if prompt := st.chat_input():
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response, error = get_completion(st.session_state.get("RUNPOD_API_KEY", ""), selected_model, prompt, max_tokens, temperature)
-                if error:
-                    st.error(f"Error: {error}")
-                else:
-                    response_text = response['choices'][0]['text']
-                    placeholder = st.empty()
-                    placeholder.markdown(response_text)
-                    message = {"role": "assistant", "content": response_text}
-                    st.session_state.messages.append(message)
-
-# Clear chat history function
-def clear_chat_history():
-    st.session_state.messages = [{"role": "assistant", "content": "How may I assist you today?"}]
-
-st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
+# Display the list of files and their content
+st.subheader("Files in Session")
+for file_name, file_data in st.session_state.files.items():
+    st.write(f"**{file_name}**")
+    st.code(file_data["content"])
