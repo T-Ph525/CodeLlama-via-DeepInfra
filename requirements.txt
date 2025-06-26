@@ -1,3 +1,2 @@
 streamlit
-replicate
-openai==0.27
+pygments
