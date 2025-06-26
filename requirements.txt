@@ -1,3 +1,3 @@
 streamlit
 replicate
-openai==0.28
+openai==0.27
